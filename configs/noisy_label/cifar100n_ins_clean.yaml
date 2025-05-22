@@ -1,0 +1,25 @@
+dataset: cifar100
+data_path: .data/
+num_classes: 100
+img_size: 32
+noise_type: ins
+noise_ratio: clean_label
+
+model: preact_resnet18
+lr: 0.02
+momentum: 0.9
+weight_decay: 0.001
+batch_size: 128
+epochs: 250
+average_entropy_loss: True
+noise_matrix_scale: 2.5
+vol_lambda: 0.01
+
+alpha: 2
+beta: 300
+lam: 1
+lam_consist: 3
+balance_lam: 0.1
+
+seed: 42
+wandb: False
