@@ -8,7 +8,7 @@ import torch.nn.functional as F
 
 from models import build_wideresnet, resnet18con
 from datasets.base_data import get_data
-from datasets.imprecise_label import get_partial_labels
+from datasets.imprecise_label import get_partial_labels, get_hierarchical_partial_labels
 from utils.configs import parse_arg_partial
 from utils.metrics import AverageMeter, accuracy
 from utils.others import reproducibility, save_checkpoint
@@ -35,8 +35,17 @@ def main(args: argparse.Namespace):
     train_data, train_target, test_data, test_target = get_data(args.data_path, args.dataset)
 
     # make partial label dataset
-    train_data, train_partial_target = get_partial_labels(train_data, train_target, args.num_classes, args.partial_rate)
-
+    args.logger.info(f"Creating noise labels with partial type {args.noise_type}")
+    partial_type = args.partial_type
+    if partial_type == 'uniform':
+        train_data, train_partial_target = get_partial_labels(train_data, train_target, args.num_classes, args.partial_rate)
+    elif partial_type == 'hierarchical':
+        if args.dataset == "cifar100":
+            train_data, train_partial_target = get_hierarchical_partial_labels(train_data, train_target, args.num_classes, args.partial_rate)
+        else:
+            raise NotImplementedError(f"Dataset {args.dataset} is not supported for hierarchical partial.")
+    else:
+        raise NotImplementedError(f"partial type {partial_type} is not supported.")
     train_dataset = ImgThreeViewDataset(args, train_data, train_partial_target)
     test_dataset = ImgBaseDataset(args, test_data, test_target)
 
@@ -57,7 +66,7 @@ def main(args: argparse.Namespace):
     )
 
     # model
-    if args.model == "widenet":
+    if args.model == "wideresnet":
         model = build_wideresnet(28, 2, 0.0, args.num_classes)
     elif args.model == "resnet18":
         # it is special for cub200

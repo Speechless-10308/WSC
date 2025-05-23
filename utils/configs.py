@@ -14,6 +14,7 @@ def parse_arg_partial():
     parser.add_argument("--partial_rate", type=float, default=0.2, help="partial label rate")
     parser.add_argument("--num_classes", type=int, default=10, help="number of classes")
     parser.add_argument("--img_size", type=int, default=32, help="image size")
+    parser.add_argument("--partial_type", type=str, default="uniform", choices=["uniform", "hierarchical"], help="partial type")
 
     # model settings
     parser.add_argument("--model", type=str, default="widenet", choices=["widenet", "resnet18"], help="model name")
@@ -68,11 +69,9 @@ def parse_arg_noisy():
     parser.add_argument("--dataset", type=str, default="cifar10", choices=["cifar10", "cifar100", "cifar10n", "cifar100n", "clothing1m"], help="dataset name")
     parser.add_argument("--data_path", type=str, default="./data", help="path to dataset")
     parser.add_argument("--num_classes", type=int, default=10, help="number of classes")
-    parser.add_argument("--crop_ratio", type=float, default=0.875, help="crop ratio")
     parser.add_argument("--img_size", type=int, default=32, help="image size")
     parser.add_argument("--noise_ratio", type=Union[str, float], default=0.2, help="noise ratio")
     parser.add_argument("--noise_type", type=str, default="sym", choices=["sym", "asym", "ins"], help="noise type")
-
 
     # model settings
     parser.add_argument("--model", type=str, default="widenet", choices=["preact_resnet18", "resnet50_pretrained", "resnet34"], help="model name")
@@ -117,32 +116,5 @@ def parse_arg_noisy():
     args.time = f"{now.year}-{now.month}-{now.day}-{now.hour}-{now.minute}-{now.second}"
 
     args.logger = Logger(args.out)
-
-    return args
-
-
-def parse_arg_semi():
-    parser = argparse.ArgumentParser(description="Weakly supervised contrastive learning for semi-supervised learning")
-
-    # dataset
-    parser.add_argument("--dataset", type=str, default="cifar10", choices=["cifar10", "cifar100"], help="dataset name")
-    parser.add_argument("--data_path", type=str, default="./data", help="path to dataset")
-    
-
-    # configs
-    parser.add_argument("--config_file", type=str, default=None, help="path to config file (default: None)")
-
-    args = parser.parse_args()
-
-    if args.config_file:
-        import yaml
-        with open(args.config_file, 'r') as f:
-            config = yaml.safe_load(f)
-        for key, value in config.items():
-            setattr(args, key, value)
-    now = datetime.now()
-    args.out = f"./results/{args.dataset}/{args.model}_{args.label}/{now.strftime('%m%d_%H%M')}/"
-
-
 
     return args

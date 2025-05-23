@@ -173,7 +173,7 @@ class RandomAugment:
 
     
 if __name__ == '__main__':
-    randaug = RandomAugment(3,5)
+    randaug = RandAugment(3,5)
     print(randaug)
     for item in randaug.augment_list:
         print(item)

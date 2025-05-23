@@ -1,0 +1,23 @@
+dataset: cub200
+data_path: ./dataset/cub200
+num_classes: 200
+img_size: 224
+partial_type: uniform
+partial_rate: 0.05
+
+model: resnet18
+lr: 0.01
+momentum: 0.9
+weight_decay: 0.00001
+batch_size: 256
+epochs: 300
+average_entropy_loss: True
+
+alpha: 2
+beta: 400
+lam: 1.0
+lam_consist: 1
+
+
+seed: 42
+wandb: False

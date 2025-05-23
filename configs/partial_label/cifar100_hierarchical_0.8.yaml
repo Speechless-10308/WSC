@@ -1,0 +1,23 @@
+dataset: cifar100
+data_path: ./dataset/cifar100
+num_classes: 100
+img_size: 32
+partial_type: hierarchical
+partial_rate: 0.8
+
+model: wideresnet
+lr: 0.1
+momentum: 0.9
+weight_decay: 0.0001
+batch_size: 256
+epochs: 200
+average_entropy_loss: False
+
+alpha: 2
+beta: 300
+lam: 1.0
+lam_consist: 1
+
+
+seed: 42
+wandb: False

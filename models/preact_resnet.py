@@ -1,12 +1,21 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
 
 from torch.autograd import Variable
 
 
 def conv3x3(in_planes, out_planes, stride=1):
     return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride, padding=1, bias=False)
+
+def normalized_thresh(z, mu=1.0):
+    if len(z.shape) == 1:
+        mask = (torch.norm(z, p=2, dim=0) < np.sqrt(mu)).float()
+        return mask * z + (1 - mask) * F.normalize(z, dim=0) * np.sqrt(mu)
+    else:
+        mask = (torch.norm(z, p=2, dim=1) < np.sqrt(mu)).float().unsqueeze(1)
+        return mask * z + (1 - mask) * F.normalize(z, dim=1) * np.sqrt(mu)
 
 
 class BasicBlock(nn.Module):
@@ -131,13 +140,12 @@ class PreActResNet(nn.Module):
         self.linear = nn.Linear(512*block.expansion, num_classes)
         self.num_features = 512*block.expansion
 
-        feat_dim = 256
+        feat_dim = 2 * self.num_features
         self.head = nn.Sequential(
             nn.Linear(self.num_features, self.num_features),
             nn.BatchNorm1d(self.num_features),
             nn.ReLU(inplace=True),
-            nn.Linear(self.num_features, feat_dim),
-            nn.BatchNorm1d(feat_dim),
+            nn.Linear(self.num_features, feat_dim)
             )
 
     def _make_layer(self, block, planes, num_blocks, stride):
@@ -148,7 +156,7 @@ class PreActResNet(nn.Module):
             self.in_planes = planes * block.expansion
         return nn.Sequential(*layers)
 
-    def forward(self, x, lin=0, lout=5, return_feat=False):
+    def forward(self, x, lin=0, lout=5):
         out = x
         if lin < 1 and lout > -1:
             out = self.conv1(out)
@@ -167,7 +175,7 @@ class PreActResNet(nn.Module):
             out = out.view(out.size(0), -1)
             out_final = self.linear(out)
         if self.training:
-            # out = self.head(out)
+            out = normalized_thresh(self.head(out))
             return out_final, out
         else:
             return out_final
