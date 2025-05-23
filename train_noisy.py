@@ -1,15 +1,17 @@
 import torch
+import torch.nn.functional as F
+import torch.nn as nn
 import numpy as np
 from tqdm import tqdm
 
 import os
 
-from models import preact_resnet18, PretrainedResNet50, ResNet34, NoiseMatrixLayer
+from models import preact_resnet18, PretrainedResNet50, ResNet34, NoiseMatrixLayer, inception_resnet_v2
 from datasets.imprecise_label import get_sym_noisy_labels, get_cifar10_asym_noisy_labels, get_cifar100_asym_noisy_labels
 from datasets.base_data import get_data
 from datasets.base_datasets import ImgBaseDataset, ImgThreeViewDataset
 from utils.configs import parse_arg_noisy
-from utils.others import reproducibility, save_checkpoint
+from utils.others import reproducibility, save_checkpoint, param_groups_weight_decay
 from utils.metrics import AverageMeter, accuracy
 from utils.validate import validate
 from loss import ce_loss, WeakSpectralLoss, SupervisedNoisyLoss
@@ -49,11 +51,11 @@ def main(args):
             raise NotImplementedError(f"Dataset {args.dataset} is not supported for asymmetric noise.")
     elif noise_type == "ins":
         if args.dataset == "cifar10n":
-            noise_file = torch.load(os.path.join(args.data_dir, "cifar10n", "CIFAR-10_human.pt"))
+            noise_file = torch.load(os.path.join(args.data_path, "cifar10n", "CIFAR-10_human.pt"))
             assert args.noise_ratio in ['clean_label', 'worse_label', 'aggre_label', 'random_label1', 'random_label2', 'random_label3']
             train_noisy_targets = noise_file[args.noise_ratio]
         elif args.dataset == "cifar100n":
-            noise_file = torch.load(os.path.join(args.data_dir, "cifar100n", "CIFAR-100_human.pt"))
+            noise_file = torch.load(os.path.join(args.data_path, "cifar10n", "CIFAR-10_human.pt"))
             assert args.noise_ratio in ['clean_label', 'noisy_label']
             train_noisy_targets = noise_file[args.noise_ratio]
         else:
@@ -74,14 +76,16 @@ def main(args):
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=8,
-        pin_memory=True
+        pin_memory=True,
+        drop_last=True
     )
     test_loader = torch.utils.data.DataLoader(
         test_dataset,
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=8,
-        pin_memory=True
+        pin_memory=True,
+        drop_last=False
     )
     args.logger.info(f"Train dataset size: {len(train_dataset)}, Test dataset size: {len(test_dataset)}")
 
@@ -92,6 +96,8 @@ def main(args):
         model = PretrainedResNet50(num_classes=args.num_classes)
     elif args.model == "resnet34":
         model = ResNet34(num_classes=args.num_classes)
+    elif args.model == "inception_resnet_v2":
+        model = inception_resnet_v2(num_classes=args.num_classes)
     else:
         raise NotImplementedError(f"Model {args.model} is not supported.")
     
@@ -103,10 +109,30 @@ def main(args):
     args.logger.info(f"Creating noise matrix with scale {args.noise_matrix_scale}") 
     noise_model = NoiseMatrixLayer(args.num_classes, init=args.noise_matrix_scale)
 
+
+    def create_projector(in_dim, out_dim):
+        if args.model in ["preact_resnet18", "inception_resnet_v2"]:
+            squential = nn.Sequential(nn.Linear(in_dim, in_dim),
+                            nn.BatchNorm1d(in_dim),
+                            nn.ReLU(inplace=True),
+                            nn.Linear(in_dim, out_dim),
+                            nn.BatchNorm1d(out_dim),
+                            )
+        else:
+            squential = nn.Identity()
+        return squential
+    
+    # projector
+    if args.model in ["preact_resnet18", "resnet50_pretrained", "resnet34"]:
+        projector = create_projector(512, 256).cuda()
+    elif args.model == "inception_resnet_v2":
+        projector = create_projector(1536, 256).cuda()
+
     # optimizer
     args.logger.info(f"Creating optimizer and scheduler")
+    per_param_args = param_groups_weight_decay(model, args.weight_decay, no_weight_decay_list={})
     optimizer = torch.optim.SGD(
-        model.parameters(),
+        per_param_args,
         lr=args.lr,
         momentum=args.momentum,
         weight_decay=args.weight_decay
@@ -167,8 +193,8 @@ def main(args):
         model.train()
         noise_model.train()
 
-        train_loss = train(args, train_loader, model, noise_model, optimizer, noise_matrix_optimizer, sup_loss, weak_spec_loss, epoch)
-
+        train_loss = train(args, train_loader, model, noise_model, projector, optimizer, noise_matrix_optimizer, sup_loss, weak_spec_loss, epoch)
+        print(f"noise matrix:\n {noise_model()}")
         scheduler.step()
 
         val_loss, val_acc = validate(test_loader, model, criterion, args)
@@ -177,7 +203,7 @@ def main(args):
             best_acc = val_acc
             is_best = True
 
-        args.logger.info(f"Epoch {epoch}: LR: {optimizer.param_groups[0]['lr']:.6f} Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
+        args.logger.info(f"Epoch {epoch+1}: LR: {optimizer.param_groups[0]['lr']:.4f} Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f} Best Acc: {best_acc:.4f}")
 
         save_checkpoint({
             'epoch': epoch + 1,
@@ -191,15 +217,16 @@ def main(args):
         }, is_best, args)
 
 
-def train(args, train_loader, model, noise_model, optimizer, noise_matrix_optimizer, sup_loss, weak_spec_loss, epoch):
+def train(args, train_loader, model, noise_model, projector, optimizer, noise_matrix_optimizer, sup_loss, weak_spec_loss, epoch):
     losses = AverageMeter()
     sup_losses = AverageMeter()
+    vol_losses = AverageMeter()
     wsc_losses = AverageMeter()
     consist_losses = AverageMeter()
     l1_losses = AverageMeter()
     l2_losses = AverageMeter()
 
-    progress_bar = tqdm(enumerate(train_loader) ,total=len(train_loader), desc=f"Train Epoch: [{epoch}]")
+    progress_bar = tqdm(enumerate(train_loader) ,total=len(train_loader), desc=f"Train Epoch: [{epoch + 1}]")
 
     for i, (x_w, x_s, x_s_, noise_y, index) in progress_bar:
         x_w = x_w.cuda()
@@ -210,18 +237,22 @@ def train(args, train_loader, model, noise_model, optimizer, noise_matrix_optimi
         x_aug = torch.cat([x_w, x_s, x_s_], dim=0)
         y_pred, feat = model(x_aug)
 
+        feat = projector(feat)
+        if args.model in ["preact_resnet18", "inception_resnet_v2"]:
+            feat = F.normalize(feat, dim=1)
+
         y_pred_w, y_pred_s, y_pred_s_ = y_pred.chunk(3)
         feat_w, feat_s, feat_s_ = feat.chunk(3)
 
         noise_matrix = noise_model()
 
-        probs_x_w = torch.softmax(y_pred_w, dim=1).detach()
+        probs_x_w = y_pred_w.softmax(dim=-1).detach()
 
-        noisy_probs_x_w = torch.matmul(torch.softmax(y_pred_w, dim=-1), noise_matrix)
+        noisy_probs_x_w = torch.matmul(y_pred_w.softmax(dim=-1), noise_matrix)
         noisy_probs_x_w = noisy_probs_x_w / noisy_probs_x_w.sum(dim=-1, keepdim=True)
 
         # supervised loss
-        supervised_loss = sup_loss(noisy_probs_x_w, noise_y)
+        supervised_loss = torch.mean(-torch.sum(F.one_hot(noise_y, args.num_classes) * torch.log(noisy_probs_x_w), dim = -1))
 
         # VolMinNet loss
         vol_loss = noise_matrix.slogdet().logabsdet
@@ -230,7 +261,7 @@ def train(args, train_loader, model, noise_model, optimizer, noise_matrix_optimi
         con_loss = ce_loss(y_pred_s, probs_x_w, reduction='mean')
         con_loss_ = ce_loss(y_pred_s_, probs_x_w, reduction='mean')
 
-            # wsc loss
+        # wsc loss
         """
         Note that there's not one way to construct the wsc loss. you will also notice that there's a function called create_noise_matrix_inv in models.utils, which provide another way to do it. Our paper also mentioned that case and the experiments for this way (yes it actually using the enviroment information) is under exploration actually. An example is here:
             >>> true_noisy_matrix_inv = create_noise_matrix_inv(args.num_classes, args.noise_ratio).detach().cuda()
@@ -246,17 +277,18 @@ def train(args, train_loader, model, noise_model, optimizer, noise_matrix_optimi
 
         # compute average entropy loss
         if args.average_entropy_loss:
-            avg_prediction = torch.mean(torch.softmax(y_pred_w, dim=-1), dim=0)
-            prior_distr = 1.0 / 200 * torch.ones_like(avg_prediction)
+            avg_prediction = torch.mean(y_pred_w.softmax(dim=-1), dim=0)
+            prior_distr = 1.0 / args.num_classes * torch.ones_like(avg_prediction)
             avg_prediction = torch.clamp(avg_prediction, min=1e-6, max=1.0)
             balance_kl = torch.mean(-(prior_distr * torch.log(avg_prediction)).sum(dim=0))
-            entropy_loss = 0.1 * balance_kl
+            entropy_loss = args.balance_lam * balance_kl
             loss += entropy_loss
 
         # update parameters
+        loss.backward()
+
         optimizer.zero_grad()
         noise_matrix_optimizer.zero_grad()
-        loss.backward()
 
         optimizer.step()
         noise_matrix_optimizer.step()
@@ -264,27 +296,29 @@ def train(args, train_loader, model, noise_model, optimizer, noise_matrix_optimi
 
         # update meter
         losses.update(loss.item(), x_w.size(0))
-        sup_losses.update((supervised_loss + vol_loss).item(), x_w.size(0))
+        sup_losses.update((supervised_loss).item(), x_w.size(0))
+        vol_losses.update(args.vol_lambda * vol_loss.item(), x_w.size(0))
         wsc_losses.update(wsc_loss.item(), x_w.size(0))
         consist_losses.update((con_loss + con_loss_).item(), x_w.size(0))
         l1_losses.update(l1.item(), x_w.size(0))
         l2_losses.update(l2.item(), x_w.size(0))
 
         progress_bar.set_postfix({
-                "loss": losses.avg,
-                "sup": sup_losses.avg,
-                "wsc": wsc_losses.avg,
-                "con": consist_losses.avg,
+                "loss": f"{losses.val:.4f}",
+                "sup": f"{sup_losses.val:.4f}",
+                "vol": f"{vol_losses.val:.4f}",
+                "wsc": f"{wsc_losses.val:.4f}",
+                "con": f"{consist_losses.val:.4f}",
             })
 
         if args.wandb:
             wandb.log({
-                    "loss": losses.avg,
-                    "sup_loss": sup_losses.avg,
-                    "wsc_loss": wsc_losses.avg,
-                    "consist_loss": consist_losses.avg,
-                    "l1_loss": l1_losses.avg,
-                    "l2_loss": l2_losses.avg
+                    "loss": losses.val,
+                    "sup_loss": sup_losses.val,
+                    "wsc_loss": wsc_losses.val,
+                    "consist_loss": consist_losses.val,
+                    "l1_loss": l1_losses.val,
+                    "l2_loss": l2_losses.val
                 })
             
     return losses.avg

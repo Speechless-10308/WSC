@@ -18,6 +18,7 @@ norm_mean_std_dict = {
     'clothing1m': [(0.6959, 0.6537, 0.6371),(0.3113, 0.3192, 0.3214)],
     'mnist': [(0.1307,), (0.3081, )],
     'fmnist': [(0.1307,), (0.3081, )],
+    'stl10': [[x / 255 for x in [112.4, 109.1, 98.6]], [x / 255 for x in [68.4, 66.6, 68.5]]]
 }
 
 
@@ -86,10 +87,6 @@ def compose_transform(img_size=32,
         # transform_list.append(CutoutDefault(scale=cutout))
         transform_list.append(transforms.RandomErasing())
     
-    if args:
-        args.logger.info(f"Use Transform: {transform_list}")
-    else:
-        print(transform_list)
     
     transform = transforms.Compose(transform_list)
     return transform
@@ -158,13 +155,40 @@ def get_img_transform(args, types='partial'):
             autoaug = "randaug"
             test_resize = "resize_crop"
 
-        w_transform = compose_transform(args.img_size, 0.875, True, resize=resize, autoaug=None, norm_mean_std=norm_mean_std_dict.get(args.dataset, [(0.485, 0.456, 0.406), (0.229, 0.224, 0.225)]), args=args)
+        w_transform = compose_transform(args.img_size, args.crop_ratio, True, resize=resize, autoaug=None, norm_mean_std=norm_mean_std_dict.get(args.dataset, [(0.485, 0.456, 0.406), (0.229, 0.224, 0.225)]), args=args)
 
-        s_transform = compose_transform(args.img_size, 0.875, True, resize=resize, autoaug=autoaug, norm_mean_std=norm_mean_std_dict.get(args.dataset, [(0.485, 0.456, 0.406), (0.229, 0.224, 0.225)]), args=args)
+        s_transform = compose_transform(args.img_size, args.crop_ratio, True, resize=resize, autoaug=autoaug, norm_mean_std=norm_mean_std_dict.get(args.dataset, [(0.485, 0.456, 0.406), (0.229, 0.224, 0.225)]), args=args)
 
-        test_transform = compose_transform(args.img_size, 0.875, False, resize=test_resize, norm_mean_std=norm_mean_std_dict.get(args.dataset, [(0.485, 0.456, 0.406), (0.229, 0.224, 0.225)]), args=args)
+        test_transform = compose_transform(args.img_size, args.crop_ratio, False, resize=test_resize, norm_mean_std=norm_mean_std_dict.get(args.dataset, [(0.485, 0.456, 0.406), (0.229, 0.224, 0.225)]), args=args)
 
         return w_transform, s_transform, test_transform
+    
+    elif types == 'semi':
+        if args.dataset in ["cifar100", "cifar10", "stl10"]:
+            s_transform = transforms.Compose([
+                transforms.Resize(args.crop_ratio),
+                transforms.RandomCrop(args.crop_ratio, padding=int(args.crop_ratio * (1 - args.crop_ratio)), padding_mode='reflect'),
+                transforms.RandomHorizontalFlip(),
+                RandAugment(3, 5),
+                transforms.ToTensor(),
+                transforms.Normalize(*norm_mean_std_dict.get(args.dataset, [(0.485, 0.456, 0.406), (0.229, 0.224, 0.225)])),
+            ])
+            w_transform = transform_weak = transforms.Compose([
+                transforms.Resize(args.crop_ratio),
+                transforms.RandomCrop(args.crop_ratio, padding=int(args.crop_ratio * (1 - args.crop_ratio)), padding_mode='reflect'),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+                transforms.Normalize(*norm_mean_std_dict.get(args.dataset, [(0.485, 0.456, 0.406), (0.229, 0.224, 0.225)])),
+            ])
+        else:
+            raise NotImplementedError(f"Unknown dataset: {args.dataset}")
+        test_transform  = transforms.Compose([
+            transforms.Resize(args.crop_ratio),
+            transforms.ToTensor(),
+            transforms.Normalize(*norm_mean_std_dict.get(args.dataset, [(0.485, 0.456, 0.406), (0.229, 0.224, 0.225)])),
+        ])
+        return w_transform, s_transform, test_transform
+    
     else:
         raise NotImplementedError(f"Unknown imprecise label type: {types}")
 
@@ -178,6 +202,8 @@ class ImgThreeViewDataset(Dataset):
         self.class_map = class_map
         self.types = types
         self.w_transform, self.s_transform, self.test_transform = get_img_transform(args, self.types)
+        args.logger.info(f"w_transform: {self.w_transform}")
+        args.logger.info(f"s_transform: {self.s_transform}")
 
     def __getitem__(self, index):
         data, target = self.data[index], self.targets[index]
@@ -205,6 +231,7 @@ class ImgBaseDataset(Dataset):
         self.types = types
 
         _, _, self.test_transform = get_img_transform(args, self.types)
+        args.logger.info(f"test_transform: {self.test_transform}")
 
     def __getitem__(self, index):
         data, target = self.data[index], self.targets[index]

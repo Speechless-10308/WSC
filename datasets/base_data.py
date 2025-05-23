@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader, DistributedSampler
 from torchvision import datasets as vision_datasets
 
 
-from .utils import CUB200, Clothing1M
+from .utils import CUB200, Clothing1M, WebVision
 from .base_sampler import TrainIterDistributedSampler
 
 
@@ -51,6 +51,12 @@ def get_data(data_dir='./data', data_name='cifar10'):
         test_dataset = Clothing1M(root=data_dir, mode='test', transform=None)
         test_data, test_targets = test_dataset.test_imgs, test_dataset.test_labels
         extra_data = None 
+    elif data_name == 'webvision':
+        train_dataset = WebVision(root_dir=data_dir, mode='all', num_class=50, transform=None)
+        train_data, train_targets = train_dataset.train_imgs, train_dataset.train_labels
+        test_dataset = WebVision(root_dir=data_dir, mode='test', num_class=50, transform=None)
+        test_data, test_targets = test_dataset.val_imgs, test_dataset.val_labels
+        extra_data = None
     elif data_name == 'mnist':
         train_dataset = vision_datasets.MNIST(root=data_dir, train=True, download=True)
         train_data, train_targets = train_dataset.data.numpy(), train_dataset.targets.numpy()

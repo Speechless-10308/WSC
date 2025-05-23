@@ -1,5 +1,5 @@
 dataset: cifar100
-data_path: /home/wangjunjie/dataset/cifar100
+data_path: ./dataset/
 num_classes: 100
 img_size: 32
 noise_type: ins

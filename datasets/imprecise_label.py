@@ -136,7 +136,7 @@ def get_hierarchical_partial_labels(samples, target, num_classes=100, partial_ra
             reverse_hierarchical_idx[idx] = i
     partial_targets = np.zeros((num_samples, num_classes))
     partial_targets[np.arange(num_samples), targets] = 1.0
-    transition_matrix = np.eye(K)
+    transition_matrix = np.eye(num_classes)
     transition_matrix[np.where(~np.eye(transition_matrix.shape[0], dtype=bool))] = partial_ration
     mask = np.zeros_like(transition_matrix)
     for i in range(len(transition_matrix)):
@@ -152,7 +152,6 @@ def get_hierarchical_partial_labels(samples, target, num_classes=100, partial_ra
     return samples, partial_targets
 
 
-
 def get_sym_noisy_labels(samples, targets, num_classes=10, noise_ratio=0.5):
     samples, targets = np.array(samples), np.array(targets)
 
@@ -165,3 +164,27 @@ def get_sym_noisy_labels(samples, targets, num_classes=10, noise_ratio=0.5):
             noisy_targets[idx] = np.random.randint(num_classes, dtype=np.int32)
 
     return noise_idx, samples, noisy_targets
+
+
+def get_semisup_labels(samples, targets, num_classes=10, num_labels=400, include_lb_to_ulb=True):
+    samples, targets = np.array(samples), np.array(targets)
+
+    lb_samples_per_class = [int(num_labels / num_classes)] * num_classes
+
+    lb_idx = []
+    ulb_idx = []
+    
+    for c in range(num_classes):
+        idx = np.where(targets == c)[0]
+        np.random.shuffle(idx)
+        lb_idx.extend(idx[:lb_samples_per_class[c]])
+        ulb_idx.extend(idx[lb_samples_per_class[c]:])
+    
+    if include_lb_to_ulb and len(lb_idx) < len(samples):
+        ulb_idx = np.concatenate([lb_idx, ulb_idx], axis=0)
+    else:
+        ulb_idx = lb_idx
+
+    lb_samples, lb_targets = samples[lb_idx], targets[lb_idx]
+    ulb_samples, ulb_targets = samples[ulb_idx], targets[ulb_idx]
+    return lb_samples, lb_targets, ulb_samples, ulb_targets
