@@ -91,31 +91,31 @@ CUDA_VISIBLE_DEVICES=0 python train_noisy.py --config_file configs/noisy_label/c
 
 ### Partial label learning (PLL)
 
-```sh
+We conduct experiments on uniform partial label of CIFAR-10, CIFAR-100 and cub200, and hierarchical partial label of CIFAR-100.
+```shell
+CUDA_VISIBLE_DEVICES=0 python train_partial.py --config_file configs/train_partial/cifar100_uniform_0.3.yaml
 ```
-
 ## Results
 
 ### Noisy label learning
-
-| Dataset & Noisy ratio                                        | CIFAR-10 (sym. 0.9) | CIFAR-100 (sym. 0.9) |
-| ------------------------------------------------------------ | :-----------------: | :------------------: |
-| [GFWS](https://github.com/Hhhhhhao/General-Framework-Weak-Supervision) (NIPS 2024) |        84.22        |        45.82         |
-| [TCL](https://github.com/Hzzone/TCL) (CVPR 2023)             |        89.04        |        54.50         |
-| **WSC (ours)**                                               |      **90.93**      |      **61.32**       |
-
+![img_noisyres](assets/img_noisyres.png)
 ### Partial label learning
-
-
+![img_partialres](assets/img_partialres.png)
 
 Please refer to our paper (and appendix) for full results.
 
 ## Citation
-
 Please cite us if you fine this project helpful for your project/paper:
+```bibtex
+@inproceedings{zhou2024CCL,
+  title={Weakly-Supervised Contrastive Learning for Imprecise Class Labels},
+  author={Zi-Hao Zhou and Jun-Jie Wang and Tong Wei and Min-Ling Zhang},
+  booktitle={International Conference on Machine Learning},
+  year={2025}
+}
+```
 
-```
-```
+
 
 ## Acknowledgments
 
