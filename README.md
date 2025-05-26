@@ -107,7 +107,7 @@ Please refer to our paper (and appendix) for full results.
 ## Citation
 Please cite us if you fine this project helpful for your project/paper:
 ```bibtex
-@inproceedings{zhou2024WSC,
+@inproceedings{zhou2025WSC,
   title={Weakly-Supervised Contrastive Learning for Imprecise Class Labels},
   author={Zi-Hao Zhou and Jun-Jie Wang and Tong Wei and Min-Ling Zhang},
   booktitle={International Conference on Machine Learning},
