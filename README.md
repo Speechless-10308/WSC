@@ -93,8 +93,16 @@ CUDA_VISIBLE_DEVICES=0 python train_noisy.py --config_file configs/noisy_label/c
 
 We conduct experiments on uniform partial label of CIFAR-10, CIFAR-100 and cub200, and hierarchical partial label of CIFAR-100.
 ```shell
-CUDA_VISIBLE_DEVICES=0 python train_partial.py --config_file configs/train_partial/cifar100_uniform_0.3.yaml
+CUDA_VISIBLE_DEVICES=0 python train_partial.py --config_file configs/partial_label/cifar100_uniform_0.3.yaml
 ```
+
+### Semi-supervised learning
+
+We conduct experiments on synthetic semi-supervised datasets CIFAR-100 and STL-10.
+```shell
+CUDA_VISIBLE_DEVICES=0 python train_semi.py --config_file configs/semisups/cifar100_label_400.yaml
+```
+
 ## Results
 
 ### Noisy label learning
