@@ -67,3 +67,6 @@ venv.bak/
 
 # MacOS system file
 .DS_Store
+
+# wandb files
+wandb/
