@@ -313,12 +313,12 @@ def train(args, train_loader, model, noise_model, projector, optimizer, noise_ma
 
         if args.wandb:
             wandb.log({
-                    "loss": losses.val,
-                    "sup_loss": sup_losses.val,
-                    "wsc_loss": wsc_losses.val,
-                    "consist_loss": consist_losses.val,
-                    "l1_loss": l1_losses.val,
-                    "l2_loss": l2_losses.val
+                    "train/loss": losses.val,
+                    "train/sup_loss": sup_losses.val,
+                    "train/wsc_loss": wsc_losses.val,
+                    "train/consist_loss": consist_losses.val,
+                    "train/l1_loss": l1_losses.val,
+                    "train/l2_loss": l2_losses.val
                 })
             
     return losses.avg

@@ -53,8 +53,8 @@ def validate(test_loader, model, criterion, args):
             if args.wandb:
                 import wandb
                 wandb.log({
-                    "test/loss": losses.avg,
-                    "test/acc1": top1.avg
+                    "test/loss": losses.val,
+                    "test/acc1": top1.val
                 })
 
     y_true = np.array(y_true)

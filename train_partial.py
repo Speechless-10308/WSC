@@ -250,12 +250,12 @@ def train(train_loader, model, optimizer, epoch, sup_loss, consistency_criterion
 
         if args.wandb:
             wandb.log({
-                "train/loss": losses.avg,
-                "train/sup_loss": sup_losses.avg,
-                "train/wsc_loss": wsc_losses.avg,
-                "train/consist_loss": consist_losses.avg,
-                "train/l1_loss": l1_losses.avg,
-                "train/l2_loss": l2_losses.avg
+                "train/loss": losses.val,
+                "train/sup_loss": sup_losses.val,
+                "train/wsc_loss": wsc_losses.val,
+                "train/consist_loss": consist_losses.val,
+                "train/l1_loss": l1_losses.val,
+                "train/l2_loss": l2_losses.val
             })
     
     return losses.avg
