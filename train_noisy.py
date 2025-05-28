@@ -55,7 +55,7 @@ def main(args):
             assert args.noise_ratio in ['clean_label', 'worse_label', 'aggre_label', 'random_label1', 'random_label2', 'random_label3']
             train_noisy_targets = noise_file[args.noise_ratio]
         elif args.dataset == "cifar100n":
-            noise_file = torch.load(os.path.join(args.data_path, "cifar10n", "CIFAR-10_human.pt"))
+            noise_file = torch.load(os.path.join(args.data_path, "cifar100n", "CIFAR-100_human.pt"))
             assert args.noise_ratio in ['clean_label', 'noisy_label']
             train_noisy_targets = noise_file[args.noise_ratio]
         else:
@@ -109,7 +109,6 @@ def main(args):
     args.logger.info(f"Creating noise matrix with scale {args.noise_matrix_scale}") 
     noise_model = NoiseMatrixLayer(args.num_classes, init=args.noise_matrix_scale)
 
-
     def create_projector(in_dim, out_dim):
         if args.model in ["preact_resnet18", "inception_resnet_v2"]:
             squential = nn.Sequential(nn.Linear(in_dim, in_dim),
@@ -129,8 +128,9 @@ def main(args):
         projector = create_projector(1536, 256).cuda()
 
     # optimizer
-    args.logger.info(f"Creating optimizer and scheduler")
     per_param_args = param_groups_weight_decay(model, args.weight_decay, no_weight_decay_list={})
+
+    args.logger.info(f"Creating optimizer and scheduler")
     optimizer = torch.optim.SGD(
         per_param_args,
         lr=args.lr,
@@ -148,20 +148,19 @@ def main(args):
     if args.dataset == "webvision":
         scheduler = torch.optim.lr_scheduler.MultiStepLR(
             optimizer,
-            milestones=[50],
+            milestones=[50 * len(train_loader),],
             last_epoch=-1,
         )
     elif args.dataset == "clothing1m":
         scheduler = torch.optim.lr_scheduler.MultiStepLR(
             optimizer,
-            milestones=[7],
+            milestones=[7 * len(train_loader),],
             last_epoch=-1,
         )
     else:
-        # for cub200, use cosine annealing
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
             optimizer,
-            T_max=args.epochs,
+            T_max=int(args.epochs * len(train_loader)),
             eta_min = 2e-4,
         )
 
@@ -193,9 +192,10 @@ def main(args):
         model.train()
         noise_model.train()
 
-        train_loss = train(args, train_loader, model, noise_model, projector, optimizer, noise_matrix_optimizer, sup_loss, weak_spec_loss, epoch)
+        train_loss = train(args, train_loader, model, noise_model, projector, optimizer, noise_matrix_optimizer, sup_loss, weak_spec_loss, scheduler, epoch)
+
         print(f"noise matrix:\n {noise_model()}")
-        scheduler.step()
+        # scheduler.step()
 
         val_loss, val_acc = validate(test_loader, model, criterion, args)
 
@@ -217,7 +217,7 @@ def main(args):
         }, is_best, args)
 
 
-def train(args, train_loader, model, noise_model, projector, optimizer, noise_matrix_optimizer, sup_loss, weak_spec_loss, epoch):
+def train(args, train_loader, model, noise_model, projector, optimizer, noise_matrix_optimizer, sup_loss, weak_spec_loss, scheduler, epoch):
     losses = AverageMeter()
     sup_losses = AverageMeter()
     vol_losses = AverageMeter()
@@ -234,9 +234,8 @@ def train(args, train_loader, model, noise_model, projector, optimizer, noise_ma
         x_s_ = x_s_.cuda()
         noise_y = noise_y.cuda()
 
-        x_aug = torch.cat([x_w, x_s, x_s_], dim=0)
+        x_aug = torch.cat([x_w, x_s, x_s_])
         y_pred, feat = model(x_aug)
-
         feat = projector(feat)
         if args.model in ["preact_resnet18", "inception_resnet_v2"]:
             feat = F.normalize(feat, dim=1)
@@ -267,12 +266,12 @@ def train(args, train_loader, model, noise_model, projector, optimizer, noise_ma
             >>> true_noisy_matrix_inv = create_noise_matrix_inv(args.num_classes, args.noise_ratio).detach().cuda()
             >>> construced_s = (F.one_hot(y, args.num_classes).float() @ true_noisy_matrix_inv).detach()
             >>> wsc_loss, l1, l2 = weak_spec_loss(feat_s, feat_s_, constructed_s)
-            For our implementation, we just use the probabilities of the model output as the constructed s.
+        For our implementation, we just use the probabilities of the model output as the constructed s.
         """
         wsc_loss, l1, l2 = weak_spec_loss(feat_s, feat_s_, probs_x_w)
 
         # total loss
-        lam = min(1, float(epoch + 1)/args.epochs) * args.lam
+        lam = min(1, float(epoch)/float(args.epochs)) * args.lam
         loss = supervised_loss + con_loss + con_loss_ + args.vol_lambda * vol_loss + lam * wsc_loss
 
         # compute average entropy loss
@@ -287,19 +286,20 @@ def train(args, train_loader, model, noise_model, projector, optimizer, noise_ma
         # update parameters
         loss.backward()
 
-        optimizer.zero_grad()
-        noise_matrix_optimizer.zero_grad()
-
         optimizer.step()
         noise_matrix_optimizer.step()
 
+        optimizer.zero_grad()
+        noise_matrix_optimizer.zero_grad()
+
+        scheduler.step()        
 
         # update meter
         losses.update(loss.item(), x_w.size(0))
         sup_losses.update((supervised_loss).item(), x_w.size(0))
         vol_losses.update(args.vol_lambda * vol_loss.item(), x_w.size(0))
         wsc_losses.update(wsc_loss.item(), x_w.size(0))
-        consist_losses.update((con_loss + con_loss_).item(), x_w.size(0))
+        consist_losses.update((con_loss).item(), x_w.size(0))
         l1_losses.update(l1.item(), x_w.size(0))
         l2_losses.update(l2.item(), x_w.size(0))
 
@@ -309,6 +309,8 @@ def train(args, train_loader, model, noise_model, projector, optimizer, noise_ma
                 "vol": f"{vol_losses.val:.4f}",
                 "wsc": f"{wsc_losses.val:.4f}",
                 "con": f"{consist_losses.val:.4f}",
+                "l1": f"{l1_losses.val:.4f}",
+                "l2": f"{l2_losses.val:.4f}",
             })
 
         if args.wandb:

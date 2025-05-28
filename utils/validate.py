@@ -42,7 +42,7 @@ def validate(test_loader, model, criterion, args):
             # acc1 = accuracy(output, y)[0]
             y_true.extend(y.cpu().tolist())
             y_pred.extend(torch.max(output, dim=-1)[1].cpu().tolist())
-            
+
             losses.update(loss.item(), x.size(0))
             # top1.update(acc1, x.size(0))
 
@@ -53,8 +53,7 @@ def validate(test_loader, model, criterion, args):
             if args.wandb:
                 import wandb
                 wandb.log({
-                    "test/loss": losses.val,
-                    "test/acc1": top1.val
+                    "test/loss": losses.avg,
                 })
 
     y_true = np.array(y_true)
@@ -67,5 +66,5 @@ def validate(test_loader, model, criterion, args):
     confusion_matrix = confusion_matrix.cpu().numpy()
     print("Confusion Matrix:")
     print(confusion_matrix)
-        
+
     return losses.avg, acc * 100.0
