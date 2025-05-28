@@ -39,7 +39,7 @@ def get_data(data_dir='./data', data_name='cifar10'):
         test_data, test_targets = test_dataset.data.transpose([0, 2, 3, 1]), test_dataset.labels.astype(np.int64)
         extra_dataset = vision_datasets.STL10(root=data_dir, split='unlabeled', download=True)
         extra_data = extra_dataset.data.transpose([0, 2, 3, 1])
-    elif data_name == 'cub':
+    elif data_name == 'cub200':
         train_dataset = CUB200(root=data_dir, train=True, download=True)
         train_data, train_targets = train_dataset.train_data, train_dataset.train_labels
         test_dataset = CUB200(root=data_dir, train=False, download=True)

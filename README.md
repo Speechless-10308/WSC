@@ -69,9 +69,19 @@ data
 ```
 
 
+
 #### Partial label datasets
 
-...
+```
+data
+├── cifar-10-batches-py
+│   └── ...
+├── cifar-100-python
+│   └── ...
+└── CUB-200-2011
+    └── ...
+
+```
 
 ## Training
 

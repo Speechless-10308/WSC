@@ -48,7 +48,7 @@ class CUB200(torch.utils.data.Dataset):
         elif download:
             url = ('http://www.vision.caltech.edu/visipedia-data/CUB-200-2011/'
                    'CUB_200_2011.tgz')
-            # self._download(url)
+            self._download(url)
             self._extract()
         else:
             raise RuntimeError(
