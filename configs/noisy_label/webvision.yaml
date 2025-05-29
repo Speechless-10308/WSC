@@ -10,17 +10,21 @@ model: inception_resnet_v2
 lr: 0.02
 momentum: 0.9
 weight_decay: 0.0005
-batch_size: 64
+batch_size: 32
 epochs: 100
 average_entropy_loss: True
-noise_matrix_scale: 2.2
+noise_matrix_scale: 2.5
 vol_lambda: 0.001
 
 alpha: 2
-beta: 200
+beta: 100
 lam: 1.0
 lam_consist: 3
 balance_lam: 0.1
 
 seed: 42
 wandb: False
+
+# distributed training
+distributed: True
+dist_url: tcp://localhost:12306

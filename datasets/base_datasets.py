@@ -202,8 +202,6 @@ class ImgThreeViewDataset(Dataset):
         self.class_map = class_map
         self.types = types
         self.w_transform, self.s_transform, self.test_transform = get_img_transform(args, self.types)
-        args.logger.info(f"w_transform: {self.w_transform}")
-        args.logger.info(f"s_transform: {self.s_transform}")
 
     def __getitem__(self, index):
         data, target = self.data[index], self.targets[index]
@@ -231,7 +229,6 @@ class ImgBaseDataset(Dataset):
         self.types = types
 
         _, _, self.test_transform = get_img_transform(args, self.types)
-        args.logger.info(f"test_transform: {self.test_transform}")
 
     def __getitem__(self, index):
         data, target = self.data[index], self.targets[index]

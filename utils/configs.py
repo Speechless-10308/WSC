@@ -102,6 +102,12 @@ def parse_arg_noisy():
     # configs
     parser.add_argument("--config_file", type=str, default=None, help="path to config file (default: None)")
 
+    # multi gpu
+    parser.add_argument("--distributed", action='store_true', default=False, help="use distributed training")
+    parser.add_argument("--local_rank", type=int, default=0, help="local rank for distributed training")
+    parser.add_argument("--world_size", type=int, default=1, help="number of processes in distributed training")
+    parser.add_argument("--dist_url", type=str, default="tcp://localhost:12355", help="url used to set up distributed training")
+
     
     args = parser.parse_args()
 
@@ -116,6 +122,6 @@ def parse_arg_noisy():
     
     args.time = f"{now.year}-{now.month}-{now.day}-{now.hour}-{now.minute}-{now.second}"
 
-    args.logger = Logger(args.out)
+    # args.logger = Logger(args.out)
 
     return args

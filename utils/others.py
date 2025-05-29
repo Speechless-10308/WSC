@@ -293,7 +293,7 @@ def reproducibility(seed: int = 42):
     np.random.seed(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-    print(f"Random seed set to {seed}")
+    # print(f"Random seed set to {seed}")
     return seed
 
 def save_checkpoint(state, is_best, args, filename='checkpoint.pth.tar'):

@@ -19,7 +19,7 @@ class NoiseMatrixLayer(nn.Module):
         self.co = co.cuda()
         self.identity = torch.eye(num_classes).cuda()
 
-    def forward(self):
+    def forward(self, dummy=None):
         sig = torch.sigmoid(self.noise_layer(self.identity))
         T = self.identity.detach() + sig*self.co.detach()
         T = F.normalize(T, p=1, dim=1)
