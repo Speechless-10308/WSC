@@ -16,7 +16,7 @@ average_entropy_loss: False
 alpha: 1
 beta: 12
 lam: 1.0
-lam_consist: 1
+lam_consist: 1.0
 
 
 seed: 42
