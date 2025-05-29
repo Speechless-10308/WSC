@@ -1,5 +1,5 @@
 dataset: webvision
-data_path: ./dataset/
+data_path: ./dataset
 num_classes: 50
 img_size: 299
 noise_type: ins

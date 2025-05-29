@@ -35,7 +35,7 @@ class CUB200(torch.utils.data.Dataset):
                 downloaded, it is not downloaded again.
         """
         self._root = os.path.expanduser(root)  # Replace ~ by the complete dir
-        self._root = os.path.join(self._root, 'cub200')
+        self._root = os.path.join(self._root, 'CUB-200-2011')
         self._train = train
         self.w_transform = w_transform
         self.s_transform = s_transform

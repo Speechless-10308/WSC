@@ -1,5 +1,5 @@
 dataset: cifar10
-data_path: ./dataset/cifar10
+data_path: ./dataset
 num_classes: 10
 img_size: 32
 partial_type: uniform

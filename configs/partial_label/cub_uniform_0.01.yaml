@@ -1,5 +1,5 @@
 dataset: cub200
-data_path: ./dataset/CUB-200-2011
+data_path: ./dataset
 num_classes: 200
 img_size: 224
 partial_type: uniform

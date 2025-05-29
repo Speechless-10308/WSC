@@ -1,5 +1,5 @@
 dataset: cifar100
-data_path: ./dataset/cifar100
+data_path: ./dataset
 num_classes: 100
 img_size: 32
 partial_type: hierarchical
