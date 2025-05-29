@@ -1,5 +1,5 @@
 dataset: cifar10n
-data_path: ./dataset/
+data_path: ./dataset/cifar10n
 num_classes: 10
 img_size: 32
 noise_type: ins
