@@ -1,5 +1,5 @@
 dataset: webvision
-data_path: ./dataset/
+data_path: /mnt/f7a57ea9-f9b0-4806-966e-7f21cbc76421/wjj/dataset/
 num_classes: 50
 img_size: 299
 noise_type: ins
@@ -10,10 +10,10 @@ model: inception_resnet_v2
 lr: 0.02
 momentum: 0.9
 weight_decay: 0.0005
-batch_size: 32
+batch_size: 64
 epochs: 100
 average_entropy_loss: True
-noise_matrix_scale: 2.5
+noise_matrix_scale: 2.75
 vol_lambda: 0.001
 
 alpha: 2
@@ -25,6 +25,10 @@ balance_lam: 0.1
 seed: 42
 wandb: False
 
+notes: "WITH_WSC_LOSS"
+
 # distributed training
 distributed: True
 dist_url: tcp://localhost:12306
+
+mixup: True

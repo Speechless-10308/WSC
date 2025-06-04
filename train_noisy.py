@@ -3,6 +3,7 @@ import torch.nn.functional as F
 import torch.nn as nn
 import torch.distributed as dist
 import torch.multiprocessing as mp
+import torch.distributed.nn.functional as dist_nn
 import numpy as np
 
 from tqdm import tqdm
@@ -18,10 +19,9 @@ from utils.configs import parse_arg_noisy
 from utils.others import reproducibility, save_checkpoint, param_groups_weight_decay
 from utils.metrics import AverageMeter, accuracy
 from utils.validate import validate
+from utils.mixup import mixup_criterion, mixup_data
 from utils.logger import Logger
 from loss import ce_loss, WeakSpectralLoss, SupervisedNoisyLoss
-
-
 
 def main_worker(local_rank, ngpu_per_node, args):
     # initialize distributed training
@@ -159,7 +159,8 @@ def main_worker(local_rank, ngpu_per_node, args):
 
     noise_model = NoiseMatrixLayer(args.num_classes, init=args.noise_matrix_scale)
     noise_model = noise_model.cuda(local_rank)
-    noise_model = nn.parallel.DistributedDataParallel(noise_model, device_ids=[local_rank,])
+    if args.distributed:
+        noise_model = nn.parallel.DistributedDataParallel(noise_model, device_ids=[local_rank,])
 
     def create_projector(in_dim, out_dim):
         if args.model in ["preact_resnet18", "inception_resnet_v2"]:
@@ -353,36 +354,53 @@ def train(args, train_loader, model, noise_model, projector, optimizer, noise_ma
         For the distributed training, we need to gather the features and probabilities from all the processes.
         """
         if args.distributed:
-            feat_s_list = [torch.zeros_like(feat_s) for _ in range(dist.get_world_size())]
-            feat_s__list = [torch.zeros_like(feat_s_) for _ in range(dist.get_world_size())]
-            probs_x_w_list = [torch.zeros_like(probs_x_w) for _ in range(dist.get_world_size())]
+            feat_s_all = dist_nn.all_gather(feat_s)
+            feat_s_all_ = dist_nn.all_gather(feat_s_)
+            probs_x_w_all = dist_nn.all_gather(probs_x_w)
 
-            dist.all_gather(feat_s_list, feat_s)
-            dist.all_gather(feat_s__list, feat_s_)
-            dist.all_gather(probs_x_w_list, probs_x_w)
+            feat_s_all= torch.cat(feat_s_all, dim=0)
+            feat_s_all_ = torch.cat(feat_s_all_, dim=0)
+            probs_x_w_all = torch.cat(probs_x_w_all, dim=0)
 
-            feat_s_all = torch.cat(feat_s_list, dim=0)
-            feat_s__all = torch.cat(feat_s__list, dim=0)
-            probs_x_w_all = torch.cat(probs_x_w_list, dim=0)
-
-            if dist.get_rank() == 0:
-                # print(f"shape: feat_s_all: {feat_s_all.shape}, feat_s__all: {feat_s__all.shape}, probs_x_w_all: {probs_x_w_all.shape}")
-                wsc_loss, l1, l2 = weak_spec_loss(feat_s_all, feat_s__all, probs_x_w_all)
-            else:
-                wsc_loss = torch.tensor(0.0, device=feat_s.device)
-                l1 = torch.tensor(0.0, device=feat_s.device)
-                l2 = torch.tensor(0.0, device=feat_s.device)
-
-            # broadcast wsc_loss, l1, l2 to all processes
-            dist.broadcast(wsc_loss, src=0)
-            dist.broadcast(l1, src=0)
-            dist.broadcast(l2, src=0)
+            wsc_loss, l1, l2 = weak_spec_loss(feat_s_all, feat_s_all_, probs_x_w_all)
         else:
             wsc_loss, l1, l2 = weak_spec_loss(feat_s, feat_s_, probs_x_w)
 
         # total loss
         lam = min(1, float(epoch)/float(args.epochs)) * args.lam
         loss = supervised_loss + con_loss + con_loss_ + args.vol_lambda * vol_loss + lam * wsc_loss
+        # loss = supervised_loss + con_loss + con_loss_ + args.vol_lambda * vol_loss
+
+        if args.mixup:
+            x_w_mix, y_a, y_b, lam_sup, idx = mixup_data(x_w, noise_y, args.alpha, True)
+            x_s_mix = lam_sup * x_s + (1 - lam_sup) * x_s[idx, :]
+            x_s_mix_ = lam_sup * x_s_ + (1 - lam_sup) * x_s_[idx, :]
+
+            y_pred_mix, feat_mix = model(torch.cat([x_w_mix, x_s_mix, x_s_mix_]))
+            feat_mix = projector(feat_mix)
+            if args.model in ["preact_resnet18", "inception_resnet_v2"]:
+                feat_mix = F.normalize(feat_mix, dim=1)
+
+            y_pred_mix_w, y_pred_mix_s, y_pred_mix_s_ = y_pred_mix.chunk(3)
+            feat_mix_w, feat_mix_s, feat_mix_s_ = feat_mix.chunk(3)
+
+            noisy_probs_x_w_mix = torch.matmul(y_pred_mix_w.softmax(dim=-1), noise_matrix)
+            noisy_probs_x_w_mix = noisy_probs_x_w_mix / noisy_probs_x_w_mix.sum(dim=-1, keepdim=True)
+
+            # supervised loss for mixup
+            sup_loss_a = -torch.sum(F.one_hot(y_a, args.num_classes) * torch.log(noisy_probs_x_w_mix), dim=-1)
+            sup_loss_b = -torch.sum(F.one_hot(y_b, args.num_classes) * torch.log(noisy_probs_x_w_mix), dim=-1)
+            supervised_loss_mix = lam_sup * sup_loss_a + (1 - lam_sup) * sup_loss_b
+            supervised_loss_mix = torch.mean(supervised_loss_mix)
+            loss += supervised_loss_mix
+
+            # wsc loss for mixup
+            ## FIXME: do not know if it is a good idea
+            probs_x_w_mix = lam_sup * y_pred_w + (1 - lam_sup) * y_pred_mix_w[idx, :]
+            wsc_loss_mix, l1_mix, l2_mix = weak_spec_loss(feat_mix_s, feat_mix_s_, probs_x_w_mix)
+            wsc_loss_mix = args.lam * wsc_loss_mix
+            loss += wsc_loss_mix
+
 
         # compute average entropy loss
         if args.average_entropy_loss:

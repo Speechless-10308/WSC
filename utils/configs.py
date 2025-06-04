@@ -101,6 +101,7 @@ def parse_arg_noisy():
 
     # configs
     parser.add_argument("--config_file", type=str, default=None, help="path to config file (default: None)")
+    parser.add_argument("--notes", type=str, default="", help="notes for the experiment")
 
     # multi gpu
     parser.add_argument("--distributed", action='store_true', default=False, help="use distributed training")
@@ -118,7 +119,7 @@ def parse_arg_noisy():
         for key, value in config.items():
             setattr(args, key, value)
     now = datetime.now()
-    args.out = f"./results/{args.dataset}/{args.model}_{args.noise_ratio}/{now.strftime('%m%d_%H%M')}/"
+    args.out = f"./results/{args.dataset}/{args.model}_{args.noise_ratio}_{args.notes}/{now.strftime('%m%d_%H%M')}/"
     
     args.time = f"{now.year}-{now.month}-{now.day}-{now.hour}-{now.minute}-{now.second}"
 

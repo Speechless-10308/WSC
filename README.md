@@ -96,7 +96,7 @@ Currently our codebase contains implementation of NLL and PLL. Following are som
 We conduct experiments on synthetic noise of CIFAR-10 and CIFAR-100, and practical noise of CIFAR-10N, CIFAR100N, Clothing1M.
 
 ```shell
-CUDA_VISIBLE_DEVICES=0 python train_noisy.py --config_file configs/noisy_label/cifar100_sym_0.9.yaml
+CUDA_VISIBLE_DEVICES=0,1,2,3 python train_noisy.py --config_file configs/noisy_label/cifar100_sym_0.9.yaml
 ```
 
 ### Partial label learning (PLL)
