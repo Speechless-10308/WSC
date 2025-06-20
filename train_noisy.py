@@ -46,7 +46,7 @@ def main_worker(local_rank, ngpu_per_node, args):
     if args.wandb and is_main_process:
         import wandb
         wandb.init(project="wsc_noisy", config=args)
-        wandb.run.name = f"{args.dataset}_noise_rate_{args.noise_ratio}_{args.time}"
+        wandb.run.name = f"{args.dataset}_noise_rate_{args.noise_ratio}_{args.time}_{args.notes}"
         wandb.config.update(args)
         wandb.run.save()
 
@@ -260,10 +260,10 @@ def main_worker(local_rank, ngpu_per_node, args):
         model.train()
         noise_model.train()
 
-        train_loss = train(args, train_loader, model, noise_model, projector, optimizer, noise_matrix_optimizer, sup_loss, weak_spec_loss, scheduler, epoch, local_rank)
+        got_dict = train(args, train_loader, model, noise_model, projector, optimizer, noise_matrix_optimizer, sup_loss, weak_spec_loss, scheduler, epoch, local_rank)
 
         if is_main_process:
-            print(f"noise matrix:\n {noise_model(None)}")
+            args.logger.info(f"noise matrix:\n {noise_model(None)}")
         # scheduler.step()
 
         val_loss, val_acc = validate(test_loader, model, criterion, args)
@@ -272,8 +272,14 @@ def main_worker(local_rank, ngpu_per_node, args):
             if val_acc > best_acc:
                 best_acc = val_acc
                 is_best = True
-
-            args.logger.info(f"Epoch {epoch+1}: LR: {optimizer.param_groups[0]['lr']:.4f} Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f} Best Acc: {best_acc:.4f}")
+            if hasattr(got_dict, 'wsc_mix_loss'):
+                args.logger.info(
+                    f"Epoch {epoch+1}: LR: {optimizer.param_groups[0]['lr']:.4f}, Sup Loss: {got_dict['sup_loss']}, WSC Loss: {got_dict['wsc_loss']}, WSC Mix Loss: {got_dict['wsc_mix_loss']} Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f} Best Acc: {best_acc:.4f}"
+                )
+            else:
+                args.logger.info(
+                    f"Epoch {epoch+1}: LR: {optimizer.param_groups[0]['lr']:.4f}, Loss: {got_dict['loss']}, Sup Loss: {got_dict['sup_loss']}, WSC Loss: {got_dict['wsc_loss']} Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f} Best Acc: {best_acc:.4f}"
+                )
             if args.distributed:
                 save_checkpoint({
                     'epoch': epoch + 1,
@@ -304,8 +310,7 @@ def train(args, train_loader, model, noise_model, projector, optimizer, noise_ma
     vol_losses = AverageMeter()
     wsc_losses = AverageMeter()
     consist_losses = AverageMeter()
-    l1_losses = AverageMeter()
-    l2_losses = AverageMeter()
+    wsc_mix_losses = AverageMeter()
 
     is_main_process = (not args.distributed) or dist.get_rank() == 0
 
@@ -317,14 +322,25 @@ def train(args, train_loader, model, noise_model, projector, optimizer, noise_ma
         x_s_ = x_s_.cuda(local_rank)
         noise_y = noise_y.cuda(local_rank)
 
-        x_aug = torch.cat([x_w, x_s, x_s_])
+        if args.mixup:
+            x_w_mix, y_a, y_b, lam_sup, idx = mixup_data(x_w, noise_y, args.mix_alpha)
+            x_s_mix = lam_sup * x_s + (1 - lam_sup) * x_s[idx, :]
+            x_s_mix_ = lam_sup * x_s_ + (1 - lam_sup) * x_s_[idx, :]
+
+            x_aug = torch.cat([x_w, x_s, x_s_, x_w_mix, x_s_mix, x_s_mix_])
+        else:
+            x_aug = torch.cat([x_w, x_s, x_s_])
         y_pred, feat = model(x_aug)
         feat = projector(feat)
         if args.model in ["preact_resnet18", "inception_resnet_v2"]:
             feat = F.normalize(feat, dim=1)
 
-        y_pred_w, y_pred_s, y_pred_s_ = y_pred.chunk(3)
-        feat_w, feat_s, feat_s_ = feat.chunk(3)
+        if args.mixup:
+            y_pred_w, y_pred_s, y_pred_s_, y_pred_mix_w, y_pred_mix_s, y_pred_mix_s_ = y_pred.chunk(6)
+            feat_w, feat_s, feat_s_, feat_mix_w, feat_mix_s, feat_mix_s_ = feat.chunk(6)
+        else:
+            y_pred_w, y_pred_s, y_pred_s_ = y_pred.chunk(3)
+            feat_w, feat_s, feat_s_ = feat.chunk(3)
 
         noise_matrix = noise_model(None)
 
@@ -335,6 +351,12 @@ def train(args, train_loader, model, noise_model, projector, optimizer, noise_ma
 
         # supervised loss
         supervised_loss = torch.mean(-torch.sum(F.one_hot(noise_y, args.num_classes) * torch.log(noisy_probs_x_w), dim = -1))
+        if args.mixup:
+            noisy_probs_x_w_mix = torch.matmul(y_pred_mix_w.softmax(dim=-1), noise_matrix)
+            noisy_probs_x_w_mix = noisy_probs_x_w_mix / noisy_probs_x_w_mix.sum(dim=-1, keepdim=True)
+            sup_loss_a = -torch.sum(F.one_hot(y_a, args.num_classes) * torch.log(noisy_probs_x_w_mix), dim=-1)
+            sup_loss_b = -torch.sum(F.one_hot(y_b, args.num_classes) * torch.log(noisy_probs_x_w_mix), dim=-1)
+            supervised_loss += torch.mean(lam_sup * sup_loss_a + (1 - lam_sup) * sup_loss_b)
 
         # VolMinNet loss
         vol_loss = noise_matrix.slogdet().logabsdet
@@ -353,53 +375,30 @@ def train(args, train_loader, model, noise_model, projector, optimizer, noise_ma
 
         For the distributed training, we need to gather the features and probabilities from all the processes.
         """
-        if args.distributed:
-            feat_s_all = dist_nn.all_gather(feat_s)
-            feat_s_all_ = dist_nn.all_gather(feat_s_)
-            probs_x_w_all = dist_nn.all_gather(probs_x_w)
+        # if args.distributed:
+        #     feat_s_all = dist_nn.all_gather(feat_s)
+        #     feat_s_all_ = dist_nn.all_gather(feat_s_)
+        #     probs_x_w_all = dist_nn.all_gather(probs_x_w)
 
-            feat_s_all= torch.cat(feat_s_all, dim=0)
-            feat_s_all_ = torch.cat(feat_s_all_, dim=0)
-            probs_x_w_all = torch.cat(probs_x_w_all, dim=0)
+        #     feat_s_all= torch.cat(feat_s_all, dim=0)
+        #     feat_s_all_ = torch.cat(feat_s_all_, dim=0)
+        #     probs_x_w_all = torch.cat(probs_x_w_all, dim=0)
 
-            wsc_loss, l1, l2 = weak_spec_loss(feat_s_all, feat_s_all_, probs_x_w_all)
-        else:
-            wsc_loss, l1, l2 = weak_spec_loss(feat_s, feat_s_, probs_x_w)
+        #     wsc_loss, l1, l2 = weak_spec_loss(feat_s_all, feat_s_all_, probs_x_w_all)
+        # else:
+        wsc_loss, l1, l2 = weak_spec_loss(feat_s, feat_s_, probs_x_w)
+
+        if args.mixup:
+            probs_x_w_mix = lam_sup * probs_x_w + (1 - lam_sup) * probs_x_w[idx, :]
+            wsc_loss_mix, l1_mix, l2_mix = weak_spec_loss(feat_mix_s, feat_mix_s_, probs_x_w_mix)
 
         # total loss
         lam = min(1, float(epoch)/float(args.epochs)) * args.lam
         loss = supervised_loss + con_loss + con_loss_ + args.vol_lambda * vol_loss + lam * wsc_loss
         # loss = supervised_loss + con_loss + con_loss_ + args.vol_lambda * vol_loss
-
         if args.mixup:
-            x_w_mix, y_a, y_b, lam_sup, idx = mixup_data(x_w, noise_y, args.alpha, True)
-            x_s_mix = lam_sup * x_s + (1 - lam_sup) * x_s[idx, :]
-            x_s_mix_ = lam_sup * x_s_ + (1 - lam_sup) * x_s_[idx, :]
-
-            y_pred_mix, feat_mix = model(torch.cat([x_w_mix, x_s_mix, x_s_mix_]))
-            feat_mix = projector(feat_mix)
-            if args.model in ["preact_resnet18", "inception_resnet_v2"]:
-                feat_mix = F.normalize(feat_mix, dim=1)
-
-            y_pred_mix_w, y_pred_mix_s, y_pred_mix_s_ = y_pred_mix.chunk(3)
-            feat_mix_w, feat_mix_s, feat_mix_s_ = feat_mix.chunk(3)
-
-            noisy_probs_x_w_mix = torch.matmul(y_pred_mix_w.softmax(dim=-1), noise_matrix)
-            noisy_probs_x_w_mix = noisy_probs_x_w_mix / noisy_probs_x_w_mix.sum(dim=-1, keepdim=True)
-
-            # supervised loss for mixup
-            sup_loss_a = -torch.sum(F.one_hot(y_a, args.num_classes) * torch.log(noisy_probs_x_w_mix), dim=-1)
-            sup_loss_b = -torch.sum(F.one_hot(y_b, args.num_classes) * torch.log(noisy_probs_x_w_mix), dim=-1)
-            supervised_loss_mix = lam_sup * sup_loss_a + (1 - lam_sup) * sup_loss_b
-            supervised_loss_mix = torch.mean(supervised_loss_mix)
-            loss += supervised_loss_mix
-
-            # wsc loss for mixup
-            ## FIXME: do not know if it is a good idea
-            probs_x_w_mix = lam_sup * y_pred_w + (1 - lam_sup) * y_pred_mix_w[idx, :]
-            wsc_loss_mix, l1_mix, l2_mix = weak_spec_loss(feat_mix_s, feat_mix_s_, probs_x_w_mix)
-            wsc_loss_mix = args.lam * wsc_loss_mix
-            loss += wsc_loss_mix
+            loss += lam * wsc_loss_mix
+        
 
 
         # compute average entropy loss
@@ -412,13 +411,13 @@ def train(args, train_loader, model, noise_model, projector, optimizer, noise_ma
             loss += entropy_loss
 
         # update parameters
+        optimizer.zero_grad()
+        noise_matrix_optimizer.zero_grad()
+
         loss.backward()
 
         optimizer.step()
         noise_matrix_optimizer.step()
-
-        optimizer.zero_grad()
-        noise_matrix_optimizer.zero_grad()
 
         scheduler.step()        
 
@@ -428,32 +427,37 @@ def train(args, train_loader, model, noise_model, projector, optimizer, noise_ma
         vol_losses.update(args.vol_lambda * vol_loss.item(), x_w.size(0))
         wsc_losses.update(wsc_loss.item(), x_w.size(0))
         consist_losses.update((con_loss).item(), x_w.size(0))
-        l1_losses.update(l1.item(), x_w.size(0))
-        l2_losses.update(l2.item(), x_w.size(0))
 
+        if args.mixup:
+            wsc_mix_losses.update(wsc_loss_mix.item(), x_w.size(0))
+        
         if is_main_process:
-            progress_bar.set_postfix({
-                    "loss": f"{losses.val:.4f}",
-                    "sup": f"{sup_losses.val:.4f}",
-                    "vol": f"{vol_losses.val:.4f}",
-                    "wsc": f"{wsc_losses.val:.4f}",
-                    "con": f"{consist_losses.val:.4f}",
-                    "l1": f"{l1_losses.val:.4f}",
-                    "l2": f"{l2_losses.val:.4f}",
-                })
+            postfix_dict = {
+                "loss": f"{losses.val:.4f}",
+                "sup": f"{sup_losses.val:.4f}",
+                "vol": f"{vol_losses.val:.4f}",
+                "wsc": f"{wsc_losses.val:.4f}",
+                "con": f"{consist_losses.val:.4f}",
+            }
+            if args.mixup:
+                postfix_dict["wsc_mix"] = f"{wsc_loss_mix.item():.4f}"
+
+            progress_bar.set_postfix(postfix_dict)
 
             if args.wandb:
                 import wandb
-                wandb.log({
-                        "train/loss": losses.val,
-                        "train/sup_loss": sup_losses.val,
-                        "train/wsc_loss": wsc_losses.val,
-                        "train/consist_loss": consist_losses.val,
-                        "train/l1_loss": l1_losses.val,
-                        "train/l2_loss": l2_losses.val
-                    })
-            
-    return losses.avg
+                wandb_dict = {f"train/{k}": float(v) for k, v in postfix_dict.items()}
+                wandb.log(wandb_dict)
+    return_dict = {
+        "loss": losses.avg,
+        "sup_loss": sup_losses.avg,
+        "vol_loss": vol_losses.avg,
+        "wsc_loss": wsc_losses.avg,
+        "consist_loss": consist_losses.avg,
+    }
+    if args.mixup:
+        return_dict["wsc_mix_loss"] = wsc_mix_losses.avg
+    return return_dict
 
 
 if __name__ == "__main__":

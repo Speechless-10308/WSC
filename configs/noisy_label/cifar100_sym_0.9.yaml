@@ -1,12 +1,12 @@
 dataset: cifar100
-data_path: ./dataset/cifar100
+data_path: /home/wangjunjie/dataset/
 num_classes: 100
 img_size: 32
 noise_type: sym
 noise_ratio: 0.9
 
 model: preact_resnet18
-lr: 0.02
+lr: 0.04
 momentum: 0.9
 weight_decay: 0.001
 batch_size: 128
@@ -23,3 +23,12 @@ balance_lam: 0.1
 
 seed: 42
 wandb: False
+
+notes: "sup+vol+con+entropy+sup_mix+wsc+wsc_mix"
+
+# distributed training
+distributed: False
+dist_url: tcp://localhost:12306
+
+mixup: True
+mix_alpha: 0.2

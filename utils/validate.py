@@ -88,8 +88,9 @@ def validate(test_loader, model, criterion, args):
     if is_main_process:
         confusion_matrix = confusion_matrix / confusion_matrix.sum(axis=1, keepdims=True)
         confusion_matrix = confusion_matrix.cpu().numpy()
-        print("Confusion Matrix:")
-        print(confusion_matrix)
+        args.logger.info(
+            f"Confusion Matrix:\n{confusion_matrix}\n"
+        )
 
         if args.wandb:
             import wandb

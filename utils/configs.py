@@ -84,6 +84,7 @@ def parse_arg_noisy():
     parser.add_argument("--average_entropy_loss", action='store_true', default=False, help="use average entropy loss")
     parser.add_argument("--noise_matrix_scale", type=float, default=1.0, help="scale for noise matrix, should be big when number of class is large")
     parser.add_argument("--vol_lambda", type=float, default=0.1, help="lambda for VolMinNet loss")
+    parser.add_argument("--mix_alpha", type=float, default=0.2, help="mixup alpha for Mixup loss")
 
     # wsc specific
     parser.add_argument("--alpha", type=float, default=2.0, help="alpha for wsc loss")

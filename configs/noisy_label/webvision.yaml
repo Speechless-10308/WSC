@@ -25,10 +25,10 @@ balance_lam: 0.1
 seed: 42
 wandb: False
 
-notes: "WITH_WSC_LOSS"
+notes: "NO_WSC_LOSS"
 
 # distributed training
 distributed: True
 dist_url: tcp://localhost:12306
 
-mixup: True
+mixup: False
