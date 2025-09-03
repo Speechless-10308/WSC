@@ -35,13 +35,13 @@ def main(args: argparse.Namespace):
     train_data, train_target, test_data, test_target = get_data(args.data_path, args.dataset)
 
     # make partial label dataset
-    args.logger.info(f"Creating noise labels with partial type {args.noise_type}")
+    args.logger.info(f"Creating partial labels with partial type {args.noise_type}")
     partial_type = args.partial_type
     if partial_type == 'uniform':
         train_data, train_partial_target = get_partial_labels(train_data, train_target, args.num_classes, args.partial_rate)
     elif partial_type == 'hierarchical':
         if args.dataset == "cifar100":
-            train_data, train_partial_target = get_hierarchical_partial_labels(train_data, train_target, args.num_classes, args.partial_rate)
+            train_data, train_partial_target = get_hierarchical_partial_labels(args, train_data, train_target, args.num_classes, args.partial_rate)
         else:
             raise NotImplementedError(f"Dataset {args.dataset} is not supported for hierarchical partial.")
     else:

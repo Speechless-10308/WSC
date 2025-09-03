@@ -138,6 +138,16 @@ class PreActResNet(nn.Module):
             nn.ReLU(inplace=True),
             nn.Linear(self.num_features, feat_dim)
             )
+        
+        self.encoder = nn.Sequential(
+            self.conv1,
+            self.bn1,
+            nn.ReLU(inplace=True),
+            self.layer1,
+            self.layer2,
+            self.layer3,
+            self.layer4,
+        )
 
     def _make_layer(self, block, planes, num_blocks, stride):
         strides = [stride] + [1]*(num_blocks-1)

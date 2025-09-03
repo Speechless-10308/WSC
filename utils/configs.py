@@ -119,3 +119,58 @@ def parse_arg_noisy():
     args.logger = Logger(args.out)
 
     return args
+
+def parse_arg_mixture():
+    parser = argparse.ArgumentParser(description="Weakly supervised contrastive learning for mixture of partial and noisy labels")
+
+    # dataset
+    parser.add_argument("--dataset", type=str, default="cifar10", choices=["cifar10", "cifar100"], help="dataset name")
+    parser.add_argument("--data_path", type=str, default="./data", help="path to dataset")
+    parser.add_argument("--partial_rate", type=float, default=0.2, help="partial label rate")
+    parser.add_argument("--num_classes", type=int, default=10, help="number of classes")
+    parser.add_argument("--crop_ratio", type=float, default=0.875, help="crop ratio")
+    parser.add_argument("--img_size", type=int, default=32, help="image size")
+    parser.add_argument("--noise_ratio", type=float, default=0.2, help="noise ratio")
+    parser.add_argument("--partial_type", type=str, default="uniform", choices=["uniform", "hierarchical"], help="partial type")
+
+    # model settings
+    parser.add_argument("--model", type=str, default="resnet18", choices=["resnet18"], help="model name")
+    parser.add_argument("--lr", type=float, default=0.1, help="learning rate")
+    parser.add_argument("--momentum", type=float, default=0.9, help="momentum")
+    parser.add_argument("--weight_decay", type=float, default=5e-4, help="weight decay")
+    parser.add_argument("--batch_size", type=int, default=128, help="batch size")
+    parser.add_argument("--epochs", type=int, default=200, help="number of epochs")
+    parser.add_argument("--wp", type=int, default=0, help="warm up period for wsc loss")
+    parser.add_argument("--lam_consist", type=float, default=0.1, help="lambda for consistency loss in wsc loss")
+
+    # wsc specific
+    parser.add_argument("--alpha", type=float, default=2.0, help="alpha for wsc loss")
+    parser.add_argument("--beta", type=float, default=300.0, help="beta for wsc loss")
+    parser.add_argument("--lam_wsc_loss", type=float, default=0.1, help="lambda for wsc loss")
+
+    # logging
+    parser.add_argument("--out", type=str, default="./results/mixture/", help="output directory")
+    parser.add_argument("--trial", type=str, default="1", help="trial number")
+    parser.add_argument("--seed", type=int, default=0, help="random seed")
+    parser.add_argument("--wandb", action="store_true", help="use wandb for logging")
+
+    # resume
+    parser.add_argument("--resume", default=None, type=str, help="path to latest checkpoint (default: none)")
+    parser.add_argument("--start_epoch", default=0, type=int, help="start epoch (default: 0)")
+    # configs
+    parser.add_argument("--config_file", type=str, default=None, help="path to config file (default: None)")
+    args = parser.parse_args()
+
+    if args.config_file:
+        import yaml
+        with open(args.config_file, 'r') as f:
+            config = yaml.safe_load(f)
+        for key, value in config.items():
+            setattr(args, key, value)
+    
+    now = datetime.now()
+    args.out = f"{args.out}/{args.dataset}_{args.partial_type}/p_rate_{args.partial_rate}/n_rate_{args.noise_ratio}/{now.strftime('%m%d_%H%M')}/"
+
+    args.time = f"{now.year}-{now.month}-{now.day}-{now.hour}-{now.minute}-{now.second}"
+    args.logger = Logger(args.out)
+    return args

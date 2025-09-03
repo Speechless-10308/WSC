@@ -1,0 +1,29 @@
+dataset: cub200
+data_path: /mnt/f7a57ea9-f9b0-4806-966e-7f21cbc76421/wjj/dataset
+num_classes: 200
+img_size: 224
+partial_type: uniform
+partial_rate: 0.05
+noise_ratio: 0.2
+
+model: resnet18
+lr: 0.01
+momentum: 0.9
+weight_decay: 0.001
+batch_size: 256
+epochs: 200
+wp: 50
+average_entropy_loss: True
+noise_matrix_scale: 6.5
+vol_lambda: 0.01
+
+alpha: 2
+beta: 400
+lam: 1.0
+lam_consist: 3.0
+balance_lam: 0.4
+beta_up: True
+
+
+seed: 42
+wandb: False
