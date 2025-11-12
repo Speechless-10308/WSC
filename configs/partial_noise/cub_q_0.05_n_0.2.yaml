@@ -1,5 +1,5 @@
 dataset: cub200
-data_path: /mnt/f7a57ea9-f9b0-4806-966e-7f21cbc76421/wjj/dataset
+data_path: ./dataset
 num_classes: 200
 img_size: 224
 partial_type: uniform
