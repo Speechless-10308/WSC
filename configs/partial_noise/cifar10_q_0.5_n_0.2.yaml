@@ -1,0 +1,25 @@
+dataset: cifar10
+data_path: ./dataset
+num_classes: 10
+img_size: 32
+noise_ratio: 0.2
+partial_rate: 0.5
+
+model: resnet18
+lr: 0.02
+momentum: 0.9
+weight_decay: 0.001
+batch_size: 128
+epochs: 300
+average_entropy_loss: True
+noise_matrix_scale: 1.0
+vol_lambda: 0.0001
+
+alpha: 1
+beta: 12
+lam: 1.0
+lam_consist: 3
+balance_lam: 0.1
+
+seed: 42
+wandb: False

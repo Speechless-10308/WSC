@@ -105,6 +105,12 @@ We conduct experiments on uniform partial label of CIFAR-10, CIFAR-100 and cub20
 ```shell
 CUDA_VISIBLE_DEVICES=0 python train_partial.py --config_file configs/partial_label/cifar100_uniform_0.3.yaml
 ```
+
+### Partial Noisy label learning (PNLL)
+```shell
+CUDA_VISIBLE_DEVICES=0 python train_mixture.py --config_file configs/partial_noise/cifar100_q_0.1_n_0.3.yaml
+```
+
 ## Results
 
 ### Noisy label learning

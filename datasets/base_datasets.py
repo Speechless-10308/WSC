@@ -112,7 +112,7 @@ def get_img_transform(args, types='partial'):
             ])
         elif args.dataset == 'cub200':
             w_transform = transforms.Compose([
-                transforms.RandomResizeCrop(args.img_size),
+                transforms.RandomResizedCrop(args.img_size),
                 transforms.RandomHorizontalFlip(),
                 transforms.RandomApply([
                 transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)
@@ -189,6 +189,17 @@ def get_img_transform(args, types='partial'):
         ])
         return w_transform, s_transform, test_transform
     
+    elif types == 'noisy_partial':
+        resize = "resize_crop_pad"
+        aug = "randaug"
+        test_resize = "resize"
+
+        w_transform = compose_transform(args.img_size, args.crop_ratio, True, resize=resize, autoaug=None, norm_mean_std=norm_mean_std_dict.get(args.dataset, [(0.485, 0.456, 0.406), (0.229, 0.224, 0.225)]), args=args)
+        s_transform = compose_transform(args.img_size, args.crop_ratio, True, resize=resize, autoaug=aug, norm_mean_std=norm_mean_std_dict.get(args.dataset, [(0.485, 0.456, 0.406), (0.229, 0.224, 0.225)]), args=args)
+        test_transform = compose_transform(args.img_size, args.crop_ratio, False, resize=test_resize, norm_mean_std=norm_mean_std_dict.get(args.dataset, [(0.485, 0.456, 0.406), (0.229, 0.224, 0.225)]), args=args)
+
+        return w_transform, s_transform, test_transform
+
     else:
         raise NotImplementedError(f"Unknown imprecise label type: {types}")
 
@@ -231,7 +242,7 @@ class ImgBaseDataset(Dataset):
         self.types = types
 
         _, _, self.test_transform = get_img_transform(args, self.types)
-        args.logger.info(f"test_transform: {self.test_transform}")
+        # args.logger.info(f"test_transform: {self.test_transform}")
 
     def __getitem__(self, index):
         data, target = self.data[index], self.targets[index]

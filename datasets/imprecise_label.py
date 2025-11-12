@@ -1,3 +1,4 @@
+import random
 import numpy as np
 import torch
 import pickle
@@ -65,7 +66,7 @@ def get_cifar100_asym_noisy_labels(samples, targets, num_classes=100, noise_rati
 
 
 def get_partial_labels(samples, targets, num_classes=10, partial_ratio=0.5):
-    samples, targets = np.array(samples), np.array(targets)
+    targets = np.array(targets)
     num_samples = targets.shape[0]
 
     partial_targets = np.zeros((num_samples, num_classes))
@@ -87,11 +88,11 @@ def unpickle(file):
         res = pickle.load(fo, encoding='bytes')
     return res
 
-def get_hierarchical_partial_labels(samples, target, num_classes=100, partial_ration=0.5):
+def get_hierarchical_partial_labels(args, samples, target, num_classes=100, partial_ration=0.5):
     samples, targets = np.array(samples), np.array(target)
     num_samples = targets.shape[0]
 
-    meta = unpickle('data/cifar-100-python/meta')
+    meta = unpickle(f'{args.data_path}/cifar-100-python/meta')
     fine_label_names = [t.decode('utf8') for t in meta[b'fine_label_names']]
     label2idx = {fine_label_names[i]:i for i in range(100)}
     x = '''aquatic mammals#beaver, dolphin, otter, seal, whale
@@ -188,3 +189,26 @@ def get_semisup_labels(samples, targets, num_classes=10, num_labels=400, include
     lb_samples, lb_targets = samples[lb_idx], targets[lb_idx]
     ulb_samples, ulb_targets = samples[ulb_idx], targets[ulb_idx]
     return lb_samples, lb_targets, ulb_samples, ulb_targets
+
+def get_partial_noisy_labels(targets, partial_targets,  noise_ratio=0.5):
+    noise_partial_targets = []
+    
+    for idx in range(len(targets)):
+        target = targets[idx]
+        partial_target = partial_targets[idx]
+        noise_flag = (random.uniform(0, 1) <= noise_ratio) 
+        if noise_flag:
+            candidate_idx = np.nonzero(1 - partial_target)[0]
+            if len(candidate_idx) == 0:
+                noise_partial_targets.append(partial_target)
+                continue
+            noise_partial_target = np.copy(partial_target)
+            noise_idx = np.random.choice(candidate_idx, 1)
+            noise_partial_target[noise_idx] = 1
+            noise_partial_target[target] = 0
+            noise_partial_targets.append(noise_partial_target)
+        else:
+            noise_partial_targets.append(partial_target)
+    
+    noise_partial_targets = np.array(noise_partial_targets)
+    return noise_partial_targets
