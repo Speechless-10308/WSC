@@ -83,6 +83,19 @@ data
 
 ```
 
+#### Noisy Partial label Datasets
+
+```
+data
+├── cifar-10-batches-py
+│   └── ...
+├── cifar-100-python
+│   └── ...
+└── CUB-200-2011
+    └── ...
+
+```
+
 ## Training
 
 Currently our codebase contains implementation of NLL and PLL. Following are some examples of training in different settings.
@@ -106,10 +119,13 @@ We conduct experiments on uniform partial label of CIFAR-10, CIFAR-100 and cub20
 CUDA_VISIBLE_DEVICES=0 python train_partial.py --config_file configs/partial_label/cifar100_uniform_0.3.yaml
 ```
 
-### Partial Noisy label learning (PNLL)
+### Noisy Partial label learning (NPLL)
 ```shell
 CUDA_VISIBLE_DEVICES=0 python train_mixture.py --config_file configs/partial_noise/cifar100_q_0.1_n_0.3.yaml
 ```
+
+### Semi-supervised learning (SSL)
+For semi-supervised learning implementation, please refer to our modified implementation of [Semi-supervised learning](https://github.com/Speechless-10308/Semi-supervised-learning-WSC).
 
 ## Results
 
@@ -117,6 +133,10 @@ CUDA_VISIBLE_DEVICES=0 python train_mixture.py --config_file configs/partial_noi
 ![img_noisyres](assets/img_noisyres.png)
 ### Partial label learning
 ![img_partialres](assets/img_partialres.png)
+### Noisy Partial label learning
+![img_pnllres](assets/img_noisyparres.png)
+### Semi-supervised learning
+![img+semi](assets/img_semi.png)
 
 Please refer to our paper (and appendix) for full results.
 
@@ -139,3 +159,4 @@ We thanks the following codebase for the reference of our repo:
 
 - [GFWS](https://github.com/Hhhhhhao/General-Framework-Weak-Supervision)
 - [PLCR](https://github.com/wu-dd/PLCR)
+- [Semi-supervised-learning](https://github.com/microsoft/Semi-supervised-learning)
