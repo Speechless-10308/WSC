@@ -1,4 +1,20 @@
-# Weakly-Supervised Contrastive Learning
+<h1 align="center"> Weakly-Supervised Contrastive Learning for Imprecise Class Labels
+</h1>
+
+<div align="center">
+
+<a href=https://github.com/Speechless-10308/WSC>
+<img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/Speechless-10308/WSC">
+</a>
+
+<a href=https://arxiv.org/abs/2505.22028>
+<img alt="GitHub Repo stars" src="https://img.shields.io/badge/arXiv_paper-2505.22028-b31b1b?style=flat-square">
+</a>
+
+
+</div>
+
+
 
 This repository contains code for the paper "**Weakly-Supervised Contrastive Learning for Imprecise Class Labels**" (*Spotlight@ICML 2025*).
 
@@ -126,6 +142,11 @@ CUDA_VISIBLE_DEVICES=0 python train_mixture.py --config_file configs/partial_noi
 
 ### Semi-supervised learning (SSL)
 For semi-supervised learning implementation, please refer to our modified implementation of [Semi-supervised learning](https://github.com/Speechless-10308/Semi-supervised-learning-WSC).
+
+The bash shell could be:
+```shell
+CUDA_VISIBLE_DEVICES=0 python train.py --c config/usb_cv/wsc/wsc_semi_aves_3959_0.yaml
+```
 
 ## Results
 
